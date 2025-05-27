@@ -1,0 +1,287 @@
+# Slide Presentation: Microbit Racing Game (Updated with Bonuses)
+
+## Slide 1: Tên Đề Tài
+**Đề tài**: Trò chơi đua xe trên Micro:bit với vật phẩm thưởng  
+- Mô tả: Trò chơi điều khiển xe tránh chướng ngại vật, thu thập vật phẩm thưởng để tăng điểm, hỗ trợ điều khiển bằng nút hoặc nghiêng, tự động chuyển đổi giao diện sáng/tối.
+
+## Slide 2: Mục Tiêu
+- **Học tập**: Nắm vững lập trình Micro:bit bằng Python, sử dụng thư viện `microbit`, `music`, `random`, và xử lý file.
+- **Ứng dụng**: Xây dựng trò chơi tương tác với chướng ngại vật, vật phẩm thưởng, lưu điểm cao, và chuyển đổi giao diện.
+- **Kỹ năng**: Sử dụng cảm biến gia tốc, hiển thị LED, âm thanh, và quản lý logic trò chơi.
+
+## Slide 3: Nội Dung
+1. **Giao diện khởi động**: Hiển thị logo trong 1.5 giây.
+2. **Menu chọn chế độ**:
+   - Chọn điều khiển: Nút bấm (A/B) hoặc nghiêng (accelerometer).
+3. **Gameplay**:
+   - Điều khiển xe (vị trí x) để tránh chướng ngại vật và thu thập vật phẩm thưởng.
+   - Chướng ngại vật: Xuất hiện ngẫu nhiên, di chuyển xuống với tốc độ khác nhau.
+   - Vật phẩm thưởng: Xuất hiện ngẫu nhiên (10% cơ hội), cộng 10 điểm khi thu thập.
+   - Điểm số: Tăng theo thời gian, cộng thêm khi thu thập vật phẩm.
+   - Tốc độ: Tăng dần (giảm `sleep` từ 400ms xuống 100ms).
+   - Giao diện: Chuyển đổi sáng/tối mỗi 100 điểm.
+   - Va chạm: Kết thúc, hiển thị điểm, so sánh điểm cao, lắc để chơi lại hoặc nhấn B về menu.
+4. **Lưu điểm cao**: Sử dụng file `high.txt` để lưu và đọc điểm cao.
+5. **Hiệu ứng**:
+   - Đếm ngược (3-2-1-GO).
+   - Hiệu ứng nổ và âm thanh khi va chạm.
+   - Âm thanh khi thu thập vật phẩm thưởng.
+
+## Slide 4: Lưu Đồ Thuật Toán
+```
+BẮT ĐẦU
+  |
+Hiển thị logo (1.5s)
+  |
+Tải điểm cao từ file
+  |
+VÒNG LẶP CHÍNH:
+  - Hiển thị menu (A: Nút, B: Nghiêng)
+  - Chọn chế độ điều khiển
+  - Chơi game:
+      + Đếm ngược (3-2-1-GO!)
+      + VÒNG LẶP GAME:
+          * Cập nhật vị trí xe (nút hoặc nghiêng)
+          * Thêm chướng ngại vật ngẫu nhiên
+          * Thêm vật phẩm thưởng ngẫu nhiên (10% cơ hội)
+          * Di chuyển chướng ngại vật và vật phẩm
+          * Chuyển đổi sáng/tối mỗi 100 điểm
+          * Vẽ nền, xe, chướng ngại vật, vật phẩm
+          * Kiểm tra va chạm:
+            - Cleveland: Nếu va chạm: Hiệu ứng nổ, hiển thị điểm
+            - Lưu điểm cao nếu phá kỷ lục
+            - Hiển thị hướng dẫn (Lắc: Chơi lại, B: Menu)
+          * Kiểm tra thu thập vật phẩm:
+            - Cộng 10 điểm, xóa vật phẩm, phát âm thanh
+          * Tăng điểm, tăng tốc độ
+KẾT THÚC
+```
+
+## Slide 5: Code
+```python
+from microbit import *
+import music
+import random
+import os
+
+# ----- Display logo -----
+logo = Image("09090:99999:99099:99999:09090")
+display.show(logo)
+sleep(1500)
+
+# ----- Save/Load high score -----
+def save_high_score(score):
+    try:
+        with open("high.txt", "w") as f:
+            f.write(str(score))
+    except:
+        pass
+
+def load_high_score():
+    try:
+        with open("high.txt") as f:
+            return int(f.read())
+    except:
+        return 0
+
+# ----- Show control selection menu -----
+def show_menu():
+    while True:
+        display.scroll("A: Btn B: Tilt", delay=100)  # Scroll text, but allow immediate button press
+        if button_a.was_pressed():
+            return "buttons"
+        elif button_b.was_pressed():
+            return "tilt"
+
+# ----- Explosion effect -----
+def explosion():
+    pattern = ["09090:09090:90909:09090:09090",
+               "99999:09090:00900:09090:99999",
+               "00000:00000:99999:00000:00000"]
+    for p in pattern:
+        display.show(Image(p))
+        sleep(150)
+
+# ----- Countdown before game -----
+def countdown():
+    for num in ["3", "2", "1"]:
+        display.show(num)
+        sleep(500)
+    display.show("GO")
+    sleep(500)
+
+# ----- Play game -----
+def play_game(control_mode, high_score):
+    car_x = 2
+    score = 0
+    speed = 400
+    obstacles = []
+    bonuses = []  # List to store bonus items
+    dark_mode = False  # Default to light mode
+
+    countdown()
+
+    while True:
+        display.clear()
+
+        # Control
+        if control_mode == "buttons":
+            if button_a.is_pressed() and car_x > 0:
+                car_x -= 1
+            elif button_b.is_pressed() and car_x < 4:
+                car_x += 1
+        else:
+            x = accelerometer.get_x()
+            if x < -300 and car_x > 0:
+                car_x -= 1
+            elif x > 300 and car_x < 4:
+                car_x += 1
+
+        # Add new obstacle
+        if random.randint(0, 3) == 0:
+            speed_type = random.choice([1, 2])
+            obstacles.append({"x": random.randint(0, 4), "y": 0, "speed": speed_type, "step": 0})
+
+        # Add new bonus item (rare, ~10% chance)
+        if random.randint(0, 9) == 0 and len(bonuses) < 1:  # Limit to 1 bonus at a time
+            bonuses.append({"x": random.randint(0, 4), "y": 0, "speed": 1, "step": 0})
+
+        # Update obstacles
+        new_obstacles = []
+        for obs in obstacles:
+            obs["step"] += 1
+            if obs["step"] >= obs["speed"]:
+                obs["y"] += 1
+                obs["step"] = 0
+            if obs["y"] < 5:
+                new_obstacles.append(obs)
+        obstacles = new_obstacles
+
+        # Update bonuses
+        new_bonuses = []
+        for bonus in bonuses:
+            bonus["step"] += 1
+            if bonus["step"] >= bonus["speed"]:
+                bonus["y"] += 1
+                bonus["step"] = 0
+            if bonus["y"] < 5:
+                new_bonuses.append(bonus)
+        bonuses = new_bonuses
+
+        # Toggle interface at 100 points or multiples
+        if score > 0 and score % 100 == 0:
+            dark_mode = not dark_mode
+            display.show("SWITCH")
+            sleep(500)
+
+        # Draw
+        car_brightness = 0 if dark_mode else 9
+        obs_brightness = 9 if dark_mode else 5
+        bg_brightness = 9 if dark_mode else 0
+        bonus_brightness = 3  # Dimmer to distinguish from obstacles
+
+        # Background
+        for x in range(5):
+            for y in range(5):
+                display.set_pixel(x, y, bg_brightness)
+
+        display.set_pixel(car_x, 4, car_brightness)
+        for obs in obstacles:
+            display.set_pixel(obs["x"], obs["y"], obs_brightness)
+        for bonus сигапin bonuses:
+            display.set_pixel(bonus["x"], bonus["y"], bonus_brightness)
+
+        # Collision with obstacles
+        for obs in obstacles:
+            if obs["x"] == car_x and obs["y"] == 4:
+                music.play(music.WAWAWAWAA)
+                explosion()
+                display.scroll("S:" + str(score))
+                sleep(1000)
+                if score > high_score:
+                    display.scroll("NEW HIGH")
+                    save_high_score(score)
+                    high_score = score
+                    sleep(1000)
+                else:
+                    display.scroll("H:" + str(high_score))
+                    sleep(1000)
+                
+                # Show instructions after game over
+                display.scroll("SHAKE B: MENU")
+                while True:
+                    if accelerometer.current_gesture():  # Shake to replay
+                        return play_game(control_mode, high_score)
+                    elif button_b.was_pressed():  # Press B to return to menu
+                        return high_score
+
+        # Collect bonus
+        for bonus in bonuses:
+            if bonus["x"] == car_x and bonus["y"] == 4:
+                score += 10  # Add 10 points for collecting bonus
+                bonuses.remove(bonus)  # Remove collected bonus
+                music.play(music.POWER_UP)  # Play sound effect
+
+        score += 1
+        if speed > 100:
+            speed -= 2
+        sleep(speed)
+
+# ----- Main program -----
+def main():
+    high_score = load_high_score()
+    while True:
+        mode = show_menu()
+        high_score = play_game(mode, high_score)
+
+main()
+```
+
+## Slide 6: Thực Hiện Mô Phỏng Trên Trình Mô Phỏng
+- **Môi trường**: Sử dụng trình mô phỏng trên [python.microbit.org](https://python.microbit.org).
+- **Hướng dẫn**:
+  1. Truy cập [python.microbit.org](https://python.microbit.org).
+  2. Sao chép code trên vào trình chỉnh sửa.
+  3. Nhấn **Run** để chạy mô phỏng.
+  4. Sử dụng chuột để mô phỏng:
+     - Nhấn nút A/B trên giao diện để chọn chế độ hoặc điều khiển.
+     - Kéo thanh gia tốc (accelerometer) để mô phỏng nghiêng.
+     - Lắc: Nhấn nút "Shake" trên giao diện để chơi lại.
+  5. Quan sát:
+     - Logo khởi động.
+     - Menu chọn chế độ điều khiển.
+     - Gameplay: Di chuyển xe, tránh chướng ngại vật, thu thập vật phẩm thưởng (hiển thị mờ hơn).
+     - Chuyển đổi sáng/tối mỗi 100 điểm.
+     - Hiệu ứng nổ, âm thanh, và hiển thị điểm khi va chạm.
+     - Âm thanh khi thu thập vật phẩm thưởng.
+- **Lưu ý**: 
+  - File I/O (`high.txt`) không hoạt động trên mô phỏng, chỉ hoạt động trên thiết bị Micro:bit thật.
+  - Chức năng lắc (shake) được mô phỏng bằng nút "Shake" trên giao diện.
+
+## Slide 7: Thực Hiện Mô Phỏng Trên Micro:bit Vật Lý
+- **Thiết bị cần thiết**:
+  - Thiết bị Micro:bit (v1 hoặc v2).
+  - Cáp USB để kết nối Micro:bit với máy tính.
+  - Máy tính có cài trình chỉnh sửa Python (ví dụ: Mu Editor) hoặc sử dụng [python.microbit.org](https://python.microbit.org).
+- **Hướng dẫn**:
+  1. Kết nối Micro:bit với máy tính qua cáp USB.
+  2. Mở [python.microbit.org](https://python.microbit.org) hoặc Mu Editor.
+  3. Sao chép code trên vào trình chỉnh sửa.
+  4. Nhấn **Flash** (trên python.microbit.org) hoặc **Flash** (trên Mu Editor) để nạp code vào Micro:bit.
+  5. Tương tác với Micro:bit:
+     - Nhấn nút A/B để chọn chế độ điều khiển (nút hoặc nghiêng).
+     - Trong chế độ nút: Nhấn A để di chuyển xe sang trái, B để sang phải.
+     - Trong chế độ nghiêng: Nghiêng Micro:bit sang trái/phải để điều khiển xe.
+     - Lắc Micro:bit để chơi lại sau khi va chạm.
+     - Nhấn nút B để trở về menu sau khi va chạm.
+  6. Quan sát:
+     - Logo khởi động trên ma trận LED.
+     - Menu chọn chế độ (cuộn chữ).
+     - Gameplay: Xe di chuyển, chướng ngại vật rơi, vật phẩm thưởng xuất hiện (mờ hơn).
+     - Chuyển đổi sáng/tối mỗi 100 điểm.
+     - Hiệu ứng âm thanh (nhạc khi va chạm hoặc thu thập vật phẩm), hiệu ứng nổ, và hiển thị điểm.
+- **Lưu ý**:
+  - File I/O (`high.txt`) hoạt động trên Micro:bit vật lý, lưu điểm cao vào bộ nhớ.
+  - Đảm bảo Micro:bit được cấp nguồn (qua USB hoặc pin) để hoạt động ổn định.
+  - Nếu sử dụng pin, kiểm tra pin trước khi chạy để tránh gián đoạn.
+  - Vật phẩm thưởng hiển thị với độ sáng thấp (3) để dễ phân biệt với chướng ngại vật.
